@@ -83,8 +83,14 @@ export default function (client: ScramjetClient, self: GlobalThis) {
 			};
 
 			function fakeEventSend(fakeev: Event) {
-				state["on" + fakeev.type]?.(trustEvent(fakeev));
-				fakeWebSocket.dispatchEvent(fakeev);
+				// Dispatch on a microtask, not inline. The listener runs inside
+				// epoxy's wasm callback, and page code often calls send() from
+				// onopen. A direct dispatch re-enters the borrowed epoxy closure
+				// and crashes wasm-bindgen. queueMicrotask keeps event order.
+				queueMicrotask(() => {
+					state["on" + fakeev.type]?.(trustEvent(fakeev));
+					fakeWebSocket.dispatchEvent(fakeev);
+				});
 			}
 
 			barews.addEventListener("open", () => {
@@ -254,6 +260,11 @@ export default function (client: ScramjetClient, self: GlobalThis) {
 			const ws = socketmap.get(ctx.this);
 			if (!ws) return;
 
+			// readyState 2 CLOSING, 3 CLOSED. Epoxy has dropped its closure by
+			// then, so a send would crash wasm-bindgen. Real sockets drop the
+			// data silently in this state, so match that.
+			if (ws.barews.readyState >= 2) return;
+
 			ctx.return(ws.barews.send(ctx.args[0]));
 		},
 	});
@@ -262,6 +273,10 @@ export default function (client: ScramjetClient, self: GlobalThis) {
 		apply(ctx) {
 			const ws = socketmap.get(ctx.this);
 			if (!ws) return;
+
+			// A close on an already closing or closed socket is a no-op, and
+			// epoxy's closure is gone, so skip the wasm call.
+			if (ws.barews.readyState >= 2) return;
 
 			if (ctx.args[0] === undefined) ctx.args[0] = 1000;
 			if (ctx.args[1] === undefined) ctx.args[1] = "";
@@ -322,7 +337,11 @@ export default function (client: ScramjetClient, self: GlobalThis) {
 								payload = await payload.arrayBuffer();
 								Object.setPrototypeOf(payload, ArrayBuffer.prototype);
 							}
-							controller.enqueue(payload);
+							// Enqueue on a microtask for the same reason as the
+							// WebSocket path: this listener runs inside epoxy's
+							// wasm callback, so a direct enqueue can re-enter the
+							// borrowed closure and crash wasm-bindgen.
+							queueMicrotask(() => controller.enqueue(payload));
 						});
 					},
 					cancel(info) {
@@ -374,6 +393,9 @@ export default function (client: ScramjetClient, self: GlobalThis) {
 	client.Proxy("WebSocketStream.prototype.close", {
 		apply(ctx) {
 			const ws = socketstreammap.get(ctx.this);
+			// See the WebSocket close guard: skip the wasm call once the socket
+			// is closing or closed, as epoxy's closure is already dropped.
+			if (ws.barews.readyState >= 2) return ctx.return(undefined);
 			if (ctx.args[0]) {
 				if (ctx.args[0].closeCode === undefined) ctx.args[0].closeCode = 1000;
 				if (ctx.args[0].reason === undefined) ctx.args[0].reason = "";
