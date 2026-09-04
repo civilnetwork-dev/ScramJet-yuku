@@ -734,11 +734,16 @@ export default function (client: ScramjetClient, self: typeof window) {
 				);
 				if (!realwin) return realwin;
 
-				if (!(SCRAMJETCLIENT in realwin)) {
-					client.init.hookSubcontext(realwin, ctx.this);
-				}
+				try {
+					if (!(SCRAMJETCLIENT in realwin)) {
+						client.init.hookSubcontext(realwin, ctx.this);
+					}
 
-				return realwin.document;
+					return realwin.document;
+				} catch {
+					// cross-origin iframe, can't do anything here
+					return ctx.get();
+				}
 			},
 		}
 	);
