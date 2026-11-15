@@ -22,9 +22,9 @@ function handleCss(
 ) {
 	// regex from vk6 (https://github.com/ading2210)
 	const urlRegex =
-		/(?i:url)\((?:\s*"((?:\\.|[^"])+)"\s*|\s*'((?:\\.|[^'])+)'\s*|((?!\s*['"])(?!\s*\))(?:\\.|[^)])+?))\)/gm;
+		/[uU][rR][lL]\((?:\s*"((?:\\.|[^"])+)"\s*|\s*'((?:\\.|[^'])+)'\s*|((?!\s*['"])(?!\s*\))(?:\\.|[^)])+?))\)/gm;
 	const Atruleregex =
-		/@import\s+((?i:url)\s*?\(.{0,9999}?\)|['"].{0,9999}?['"]|.{0,9999}?)($|\s|;)/gm;
+		/@import\s+([uU][rR][lL]\s*?\(.{0,9999}?\)|['"].{0,9999}?['"]|.{0,9999}?)($|\s|;)/gm;
 	css = String(css);
 	css = css.replace(
 		urlRegex,
